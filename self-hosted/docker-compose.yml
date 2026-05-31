@@ -1,0 +1,30 @@
+# =============================================================================
+#  EXERCÍCIO 3 - Self-hosted runner para GitLab CI via Docker
+#  Sobe um GitLab Runner próprio (self-hosted) na sua máquina.
+#
+#  Uso:
+#    1) docker compose -f self-hosted/docker-compose.yml up -d
+#    2) Registre o runner (pegue o token em: Settings > CI/CD > Runners):
+#         docker exec -it gitlab-runner gitlab-runner register \
+#           --non-interactive \
+#           --url "https://gitlab.com/" \
+#           --registration-token "SEU_TOKEN" \
+#           --executor "docker" \
+#           --docker-image "node:20-bookworm-slim" \
+#           --description "runner-self-hosted-local" \
+#           --tag-list "self-hosted,node"
+#    3) Garanta que o runner apareça "online" na UI do GitLab e dispare o pipeline.
+#
+#  Para direcionar jobs a este runner, adicione `tags: [self-hosted]` no job
+#  desejado do .gitlab-ci.yml.
+# =============================================================================
+services:
+  gitlab-runner:
+    image: gitlab/gitlab-runner:latest
+    container_name: gitlab-runner
+    restart: unless-stopped
+    volumes:
+      # Persiste a configuração/registro do runner entre reinícios
+      - ./runner-config:/etc/gitlab-runner
+      # Permite que o runner use o Docker do host (executor "docker")
+      - /var/run/docker.sock:/var/run/docker.sock
