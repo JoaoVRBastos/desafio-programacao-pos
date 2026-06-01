@@ -1,0 +1,68 @@
+# =============================================================================
+#  EXERCÍCIO 1 - Pipeline de CI no GitLab CI/CD
+#  Disciplina: Integração Contínua e Testes Automatizados (PGATS-2026-03)
+#
+#  Porta a MESMA pipeline do GitHub Actions para outra ferramenta de CI
+#  (sugestão do enunciado). Mantém os conceitos da aula, mudando apenas a
+#  nomenclatura/sintaxe (slide 61: "essas práticas se aplicam a outros
+#  provedores de CI, mudando nomenclaturas, sintaxe e pré-definições").
+#
+#  Equivalências GitHub Actions  ->  GitLab CI
+#    workflow / jobs             ->  stages / jobs
+#    steps                       ->  script
+#    runs-on                     ->  image (+ tags p/ runner self-hosted)
+#    actions/upload-artifact     ->  artifacts:paths
+#    action de test reporter     ->  artifacts:reports:junit (integração NATIVA)
+# =============================================================================
+
+# Boa prática (slide 61): fixe a versão da imagem da máquina de execução.
+default:
+  image: node:20-bookworm-slim
+  # Boa prática (slide 61): timeouts curtos para não bloquear o time.
+  timeout: 10 minutes
+  # Cache das dependências entre jobs/execuções, com chave pelo lock file.
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - node_modules/
+
+# ---- Triggers / Controle de execução do pipeline (slide 31) ----------------
+# Executa em pushes para branches, em Merge Requests e em pipelines agendados
+# (Scheduled, configurável em CI/CD > Schedules na UI do GitLab).
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_COMMIT_BRANCH
+
+stages:
+  - build
+  - test
+
+# 1) BUILD - instalação determinística das dependências (slide 9: Compilação)
+install_dependencies:
+  stage: build
+  script:
+    - npm ci
+  artifacts:
+    paths:
+      - node_modules/
+    expire_in: 1 hour
+
+# 2) TEST - execução dos testes + geração/publicação dos relatórios (slide 9: Testes)
+unit_tests:
+  stage: test
+  needs: ["install_dependencies"]
+  script:
+    - npm run test:ci
+  artifacts:
+    when: always # publica relatórios mesmo quando há falhas
+    paths:
+      - reports/ # xUnit XML + CTRF JSON para download
+    expire_in: 14 days
+    reports:
+      # Integração NATIVA do GitLab: o XML no formato xUnit aparece na aba
+      # "Tests" do pipeline e no widget de Merge Request (slides 43-44).
+      junit: reports/junit/results.xml

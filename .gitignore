@@ -1,1 +1,8 @@
 node_modules/
+
+# Relatórios de execução de testes gerados pela pipeline (xUnit XML + CTRF JSON)
+reports/
+
+# Self-hosted runners (binários e configuração local — NÃO versionar)
+self-hosted/actions-runner/
+self-hosted/runner-config/

@@ -1,0 +1,51 @@
+# =============================================================================
+#  EXERCÍCIO 3 - Pipeline executada em um SELF-HOSTED RUNNER (GitHub Actions)
+#  Disciplina: Integração Contínua e Testes Automatizados (PGATS-2026-03)
+#
+#  Idêntica à pipeline base, porém executa na SUA máquina (runner self-hosted)
+#  ao invés dos runners hospedados pelo GitHub. Veja docs/exercicio-3-self-hosted.md
+#  para a análise (quando usar, plataformas equivalentes) e o passo a passo de
+#  registro do runner (script em self-hosted/setup-github-runner.ps1).
+#
+#  Disparo MANUAL (workflow_dispatch) de propósito: assim o job não fica
+#  eternamente "Queued" bloqueando PRs caso nenhum runner self-hosted esteja online.
+# =============================================================================
+name: CI (self-hosted)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-self-hosted:
+    name: Build e Testes no runner self-hosted
+    # 'self-hosted' = qualquer runner próprio registrado no repositório.
+    # Você pode refinar por labels, ex.: [self-hosted, windows, x64].
+    runs-on: [self-hosted]
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Executar testes (com relatórios)
+        run: npm run test:ci
+
+      - name: Publicar artefatos de relatório
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorios-de-teste-self-hosted
+          path: reports/
+          retention-days: 14

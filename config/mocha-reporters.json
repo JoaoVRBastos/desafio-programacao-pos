@@ -1,0 +1,12 @@
+{
+  "reporterEnabled": "spec, mocha-junit-reporter, mocha-ctrf-json-reporter",
+  "mochaJunitReporterReporterOptions": {
+    "mochaFile": "reports/junit/results.xml",
+    "testsuitesTitle": "ServicoDePagamento - Testes Unitarios",
+    "rootSuiteTitle": "desafio-programacao-pos"
+  },
+  "mochaCtrfJsonReporterReporterOptions": {
+    "outputDir": "reports/ctrf",
+    "outputFile": "ctrf-report.json"
+  }
+}

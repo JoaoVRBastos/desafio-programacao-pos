@@ -1,0 +1,117 @@
+# =============================================================================
+#  Pipeline de CI - GitHub Actions  (pipeline "base", feito em aula)
+#  Disciplina: Integração Contínua e Testes Automatizados (PGATS-2026-03)
+#
+#  Cobre os conceitos da aula (slide 31): Jobs, Steps, Triggers (push,
+#  pull_request, scheduled, manual), Actions, Execução de testes e
+#  Relatórios de resultados.
+#
+#  O Exercício 2 (action do Marketplace) está integrado neste mesmo arquivo,
+#  no step "Publicar relatório de testes (CTRF)".
+# =============================================================================
+name: CI
+
+# ---- Triggers / Gatilhos de execução (slide 31) ----------------------------
+on:
+  push:
+    branches: [main, "feat/**"]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Build agendado: toda segunda-feira às 06:00 UTC (boa prática: "Build a cada commit"
+    # + execução periódica para detectar quebras de dependências)
+    - cron: "0 6 * * 1"
+  workflow_dispatch: # Permite disparo manual a partir de 1 clique (slide 25)
+
+# Boa prática (slide 61): conceda o mínimo de permissões necessárias.
+# 'pull-requests: write' permite que o reporter comente nas Pull Requests.
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  test:
+    name: Build e Testes Unitários
+    # Boa prática (slide 61): fixe a versão da máquina de execução.
+    runs-on: ubuntu-24.04
+    # Boa prática (slide 61): defina timeouts curtos (o padrão são 6h).
+    timeout-minutes: 10
+
+    steps:
+      # 1) Controle de versão: traz o código do repositório para o runner
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      # 2) Prepara o ambiente Node e habilita cache do npm (build mais rápido)
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      # 3) Instalação determinística das dependências (usa o package-lock.json)
+      - name: Instalar dependências
+        run: npm ci
+
+      # 4) Execução dos testes gerando relatórios padronizados:
+      #    - xUnit XML  -> reports/junit/results.xml   (slides 43-44)
+      #    - CTRF JSON  -> reports/ctrf/ctrf-report.json (slides 45-46)
+      - name: Executar testes (com relatórios)
+        run: npm run test:ci
+
+      # 5) Guarda os relatórios como artefatos do build (download na aba do run).
+      #    'if: always()' garante o upload mesmo quando algum teste falha.
+      - name: Publicar artefatos de relatório
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorios-de-teste
+          path: reports/
+          retention-days: 14
+
+      # ----------------------------------------------------------------------
+      # 6) EXERCÍCIO 2 - Action do Marketplace
+      #    ctrf-io/github-test-reporter -> https://github.com/marketplace/actions/github-test-reporter-ctrf
+      #    Publica um relatório rico (tabela de testes, flaky, histórico e
+      #    resumo opcional por IA) direto no "Summary" da execução e, em PRs,
+      #    como comentário. Escolhido por agregar "relatórios + IA" ao fluxo.
+      # ----------------------------------------------------------------------
+      - name: Publicar relatório de testes (CTRF)
+        if: always()
+        uses: ctrf-io/github-test-reporter@v1
+        with:
+          report-path: "./reports/ctrf/ctrf-report.json"
+          summary-report: true
+          test-report: true
+          failed-report: true
+          flaky-report: true
+          # pull-request: true  # descomente para comentar o resultado na PR
+          # ai-report: true     # habilita resumo por IA (requer configurar provedor)
+
+  # ==========================================================================
+  #  EXERCÍCIO 2 (bônus) - Notificação
+  #  Demonstra "notificações" no fluxo. Roda apenas se o secret SLACK_WEBHOOK_URL
+  #  estiver configurado, então NÃO quebra o pipeline de quem não usa Slack.
+  #  Configure em: Settings > Secrets and variables > Actions.
+  # ==========================================================================
+  notificar:
+    name: Notificar resultado (opcional)
+    needs: test
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # env no nível do JOB: assim 'env.SLACK_WEBHOOK_URL' fica visível no 'if' do step.
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+    steps:
+      - name: Enviar notificação ao Slack
+        if: ${{ env.SLACK_WEBHOOK_URL != '' }}
+        uses: slackapi/slack-github-action@v2
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "Pipeline *${{ github.repository }}* (${{ github.ref_name }}) finalizou com status: *${{ needs.test.result }}*"
+            }
