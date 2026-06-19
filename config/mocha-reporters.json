@@ -1,5 +1,12 @@
 {
-  "reporterEnabled": "spec, mocha-junit-reporter, mocha-ctrf-json-reporter",
+  "reporterEnabled": "spec, mochawesome, mocha-junit-reporter, mocha-ctrf-json-reporter",
+  "mochawesomeReporterOptions": {
+    "reportDir": "reports/mochawesome",
+    "reportFilename": "index",
+    "reportTitle": "ServicoDePagamento - Relatorio de Testes",
+    "quiet": true,
+    "json": false
+  },
   "mochaJunitReporterReporterOptions": {
     "mochaFile": "reports/junit/results.xml",
     "testsuitesTitle": "ServicoDePagamento - Testes Unitarios",
