@@ -1,114 +1,105 @@
-# desafio-programacao-pos — Integração Contínua e Testes Automatizados
+# Trabalho de Conclusão — Integração Contínua com GitHub Actions
 
-Projeto da disciplina **Integração Contínua e Testes Automatizados** (PGATS-2026-03).
-Aplicação Node.js simples (`ServicoDePagamento`) com testes unitários em **Mocha**,
-usada como base para configurar pipelines de CI em **duas ferramentas diferentes**,
-gerar **relatórios padronizados** e executar em **runners self-hosted**.
+Pipeline de Integração Contínua em **GitHub Actions** para um projeto Node.js com
+testes automatizados, desenvolvida para o Trabalho de Conclusão da disciplina
+**Integração Contínua e Testes Automatizados** (PGATS-2026-03).
 
-## Estrutura do projeto
+> Projeto reaproveitado de outra disciplina da pós: `ServicoDePagamento`, um
+> serviço de pagamentos simples com testes unitários em **Mocha**.
+
+## Objetivo e requisitos atendidos
+
+| Requisito do TCC | Como foi atendido |
+| --- | --- |
+| Execução por **push** | `on.push` nas branches `main` e `feat/**` |
+| Execução **manual** | `on.workflow_dispatch` (botão *Run workflow*) |
+| Execução **agendada** | `on.schedule` com `cron` (segunda 06:00 UTC) |
+| **Geração** de relatório de testes | Mochawesome (HTML), xUnit XML e CTRF JSON |
+| **Armazenamento/publicação** do relatório | `actions/upload-artifact` + resumo CTRF no *Summary* do run |
+| **README** com solução e conceitos | este documento |
+
+## O projeto
 
 ```
 .
 ├── src/servicoDePagamento.js          # Código da aplicação
 ├── test/servicoDePagamento.test.js    # Testes unitários (Mocha)
-├── config/mocha-reporters.json        # Config multi-reporter (spec + xUnit + CTRF)
-├── .github/workflows/
-│   ├── ci.yml                         # Pipeline base (GitHub Actions) + Exercício 2
-│   └── ci-self-hosted.yml             # Exercício 3 (runner self-hosted)
-├── .gitlab-ci.yml                     # Exercício 1 (GitLab CI/CD)
-├── self-hosted/
-│   ├── docker-compose.yml             # Exercício 3 — GitLab Runner via Docker
-│   └── setup-github-runner.ps1        # Exercício 3 — registra runner do GitHub no Windows
-└── docs/exercicio-3-self-hosted.md    # Exercício 3 — análise escrita
+├── config/mocha-reporters.json        # Multi-reporter: spec + HTML + xUnit + CTRF
+└── .github/workflows/ci.yml           # A pipeline do TCC
 ```
 
-## Como rodar localmente
+### Rodar localmente
 
 ```bash
 npm ci             # instala dependências
-npm test           # roda os testes (saída "spec" no console)
-npm run test:ci    # roda os testes e gera os relatórios em reports/
+npm test           # executa os testes (saída no console)
+npm run test:ci    # executa os testes e gera os relatórios em reports/
 ```
 
-O `npm run test:ci` produz, em uma única execução:
+O `npm run test:ci` roda o Mocha com o **mocha-multi-reporters**, gerando numa
+única execução:
 
-- `reports/junit/results.xml` — formato **xUnit XML** (slides 43-44), praticamente um padrão de mercado.
-- `reports/ctrf/ctrf-report.json` — formato **CTRF** (slides 45-46), JSON padronizado que habilita relatórios e análises por IA.
+| Relatório | Formato | Caminho | Para quem |
+| --- | --- | --- | --- |
+| Mochawesome | HTML | `reports/mochawesome/index.html` | humano (QA/dev/negócio) |
+| JUnit | xUnit XML | `reports/junit/results.xml` | ferramentas de CI |
+| CTRF | JSON | `reports/ctrf/ctrf-report.json` | análises/IA |
 
----
+## A pipeline (`.github/workflows/ci.yml`)
 
-## Exercício 1 — Pipeline em outra ferramenta de CI (GitLab CI/CD)
+### Gatilhos (triggers)
 
-Arquivo: [`.gitlab-ci.yml`](.gitlab-ci.yml)
+```yaml
+on:
+  push:
+    branches: [main, "feat/**"]   # a cada commit enviado
+  pull_request:
+    branches: [main]              # em Pull Requests para a main
+  schedule:
+    - cron: "0 6 * * 1"           # toda segunda-feira às 06:00 UTC
+  workflow_dispatch:              # disparo manual (1 clique)
+```
 
-A mesma pipeline do GitHub Actions foi portada para o **GitLab CI/CD**, mantendo os
-conceitos da aula e mudando apenas a sintaxe (slide 61). Destaques:
+Cobre os três gatilhos exigidos (push, manual e agendado) e, de bônus,
+`pull_request` — aplicando a boa prática "build a cada commit/PR".
 
-- **Stages** `build` → `test` (equivalente aos *jobs/steps*).
-- **Triggers** via `workflow:rules`: pushes em branches, Merge Requests e pipelines agendados (slide 31).
-- **Cache** de `node_modules` com chave pelo `package-lock.json`.
-- **Relatórios**: o XML xUnit é publicado com `artifacts:reports:junit`, a
-  **integração nativa** do GitLab — os resultados aparecem na aba *Tests* do pipeline
-  e no widget da Merge Request (o equivalente, no GitLab, à action de test reporter).
-- Boas práticas do slide 61: imagem com versão fixa e `timeout` curto.
+### Etapas (job `test`)
 
-| GitHub Actions | GitLab CI |
-| --- | --- |
-| `on: [push, pull_request, schedule]` | `workflow:rules` |
-| `jobs` / `steps` | `stages` / `script` |
-| `runs-on` | `image` (+ `tags` p/ self-hosted) |
-| `actions/upload-artifact` | `artifacts:paths` |
-| action de test reporter (Marketplace) | `artifacts:reports:junit` (nativo) |
+1. **Checkout** do código (`actions/checkout`).
+2. **Setup do Node 20** com cache de `npm` (`actions/setup-node`).
+3. **`npm ci`** — instalação determinística pelo `package-lock.json`.
+4. **`npm run test:ci`** — executa os testes e gera os 3 relatórios.
+5. **`actions/upload-artifact`** — publica a pasta `reports/` como artefato do
+   run (com `if: always()`, sai mesmo se um teste falhar).
+6. **`ctrf-io/github-test-reporter`** — publica um resumo visual dos testes
+   direto na aba *Summary* da execução.
 
----
+### Como ver o relatório publicado
 
-## Exercício 2 — Action do Marketplace
+- **Resumo rápido:** aba *Summary* do run (gerado pela action CTRF).
+- **Relatório HTML completo:** no run → seção *Artifacts* → baixar
+  `relatorios-de-teste` → abrir `mochawesome/index.html` no navegador.
 
-Action escolhida: **[ctrf-io/github-test-reporter](https://github.com/marketplace/actions/github-test-reporter-ctrf)**
-— integrada em [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (step "Publicar relatório de testes (CTRF)").
+## Conceitos aplicados (da disciplina)
 
-**Por que esta?** Ela agrega **relatórios + IA** ao fluxo (categorias sugeridas no
-enunciado) e conversa diretamente com o conteúdo da aula sobre o formato **CTRF**
-(slides 45-46). O que ela entrega:
+- **Etapas macro do CI**: Compilação (`npm ci`) → Testes (`npm run test:ci`) →
+  Relatórios/Inspeção.
+- **Gatilhos**: push, pull_request, scheduled e manual.
+- **Relatórios padronizados**: xUnit (praticamente um padrão) e CTRF (JSON
+  padronizado), além do HTML legível (Mochawesome).
+- **Boas práticas**: build a cada commit, *fail fast*, timeout curto
+  (`timeout-minutes`), versão fixa da máquina (`ubuntu-24.04`), permissões
+  mínimas e segredos fora do código (notificação opcional via secret).
 
-- Resumo visual dos testes direto no **Summary** da execução do workflow.
-- Relatórios de **testes que falharam** e de **testes instáveis (flaky)** — apoia a
-  análise de resultados dos slides 51-52.
-- Comentário automático na **Pull Request** (opcional, já deixado comentado no YAML).
-- **Resumo por IA** dos erros (opcional) — o "CTRF AI Test Reporter" do slide 46.
+## Evidência de execução
 
-> **Bônus — Notificações:** o job `notificar` demonstra a categoria "notificações"
-> enviando o status ao **Slack** via `slackapi/slack-github-action`. Ele só roda se o
-> secret `SLACK_WEBHOOK_URL` existir, então não quebra o pipeline de quem não o configurar
-> (boa prática do slide 58: "mantenha visibilidade do status do build").
+Histórico de execuções (incluindo runs **agendados** que passaram):
+**https://github.com/JoaoVRBastos/desafio-programacao-pos/actions**
 
----
+## Extras (fora do escopo do TCC)
 
-## Exercício 3 — Self-hosted runners/agents
+Exercícios práticos do módulo, mantidos no repositório:
 
-Análise completa (quando usar, prós/contras, plataformas equivalentes e segurança):
-**[docs/exercicio-3-self-hosted.md](docs/exercicio-3-self-hosted.md)**.
-
-Resumo do que foi implementado:
-
-- **GitHub Actions** — workflow [`ci-self-hosted.yml`](.github/workflows/ci-self-hosted.yml)
-  com `runs-on: [self-hosted]` + script PowerShell
-  [`self-hosted/setup-github-runner.ps1`](self-hosted/setup-github-runner.ps1) para
-  registrar o runner na própria máquina (Windows).
-- **GitLab CI** — [`self-hosted/docker-compose.yml`](self-hosted/docker-compose.yml)
-  sobe um GitLab Runner em Docker; basta marcar o job com `tags: [self-hosted]`.
-
-**Em uma frase:** faz sentido usar self-hosted quando você precisa de hardware/SO
-específico, acesso a rede privada, controle de custo em alto volume ou compliance —
-e **todas** as grandes plataformas (GitLab, Azure DevOps, Jenkins, CircleCI,
-Bitbucket) oferecem o equivalente, mudando apenas a nomenclatura.
-
----
-
-## Conceitos da aula aplicados
-
-- **Etapas macro do CI** (slide 9): Compilação (`npm ci`) → Testes (`npm run test:ci`) → Relatórios.
-- **Triggers** (slide 31): push, pull_request, scheduled e disparo manual.
-- **Relatórios padronizados**: xUnit XML (slides 43-44) e CTRF (slides 45-46).
-- **Boas práticas** (slides 54-61): build a cada commit, shift-left, sem segredos no
-  código, visibilidade do status, timeouts curtos, versões fixas e uso consciente de Actions.
+- `.gitlab-ci.yml` — a mesma pipeline portada para **GitLab CI**.
+- `.github/workflows/ci-self-hosted.yml` + `self-hosted/` — execução em
+  **runner self-hosted** (análise em `docs/exercicio-3-self-hosted.md`).
